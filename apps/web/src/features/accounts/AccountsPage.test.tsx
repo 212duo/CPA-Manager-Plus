@@ -373,6 +373,7 @@ const { mocks } = vi.hoisted(() => {
       batchPatchFields: vi.fn(async () => ({ success: 1, failed: 0, failedNames: [] })),
       batchSetStatus: vi.fn(async () => undefined),
       consumeResetCredit: vi.fn(async () => ({ statusCode: 200, body: '' })),
+      resetQuota: vi.fn(async () => ({ status: 'ok', auth_index: 'auth-1', models: [] })),
       batchDownload: vi.fn(async () => undefined),
       batchDelete: vi.fn(),
       handleDelete: vi.fn(),
@@ -816,6 +817,9 @@ vi.mock('@/services/api', () => ({
     getActiveQuotaCooldowns: mocks.getActiveQuotaCooldowns,
     listAccountActionCandidates: mocks.listAccountActionCandidates,
   },
+  authFilesApi: {
+    resetQuota: mocks.resetQuota,
+  },
   consumeCodexRateLimitResetCredit: mocks.consumeResetCredit,
 }));
 
@@ -1244,6 +1248,7 @@ describe('AccountsPage replacement flows', () => {
     mocks.batchSetStatus.mockClear();
     mocks.batchPatchFields.mockClear();
     mocks.consumeResetCredit.mockClear();
+    mocks.resetQuota.mockClear();
     mocks.batchDelete.mockClear();
     mocks.handleDelete.mockClear();
     mocks.handleDownload.mockClear();
@@ -13287,6 +13292,7 @@ describe('AccountsPage replacement flows', () => {
     await flushPromises();
 
     expect(mocks.consumeResetCredit).toHaveBeenCalledTimes(1);
+    expect(mocks.resetQuota).toHaveBeenCalledWith('auth-1', expect.anything());
     const committed = applyCodexQuotaCommits();
     expect(committed['codex.json::auth-1'].status).toBe('success');
     expect(committed['codex.json::auth-1'].rateLimitResetCreditsAvailableCount).toBe(0);
@@ -13588,6 +13594,31 @@ describe('AccountsPage replacement flows', () => {
     expect(mocks.showConfirmation).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'codex_quota.reset_confirm_title' })
     );
+  });
+
+  it('resets gateway cooldown quota when refreshed quota is healthy', async () => {
+    const file = makeCodexFile('codex-healthy.json', 'auth-healthy-1', 'healthy@example.com');
+    mocks.files = [file];
+    vi.spyOn(CODEX_CONFIG, 'fetchQuota').mockResolvedValue({
+      ...makeCodexQuotaData(),
+      windows: [
+        {
+          id: 'five-hour',
+          label: '5h',
+          usedPercent: 10,
+          resetLabel: 'later',
+          resetAtMs: Date.now() + 3600000,
+        },
+      ],
+    });
+
+    const renderer = await renderAccountsPage();
+    await act(async () => {
+      findButtonByText(renderer, 'accounts.refresh_quota').props.onClick();
+    });
+    await flushPromises();
+
+    expect(mocks.resetQuota).toHaveBeenCalledWith('auth-healthy-1', expect.anything());
   });
 
   it('keeps reset unavailable for runtime-only credentials', async () => {

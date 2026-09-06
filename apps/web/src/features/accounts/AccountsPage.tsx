@@ -280,6 +280,7 @@ import {
 } from '@/features/accounts/components';
 import {
   accountQuotaSnapshotApi,
+  authFilesApi,
   consumeCodexRateLimitResetCredit,
   monitoringAnalyticsApi,
   usageServiceApi,
@@ -5801,6 +5802,14 @@ export function AccountsPage() {
           if (!result || result.status !== 'success') return false;
           const refreshedQuota = result.state;
           const healthyQuota = isKnownHealthyCodexQuota(refreshedQuota);
+          if (healthyQuota && !row.raw.disabled) {
+            const authIndex = normalizeAuthIndex(row.raw['auth_index'] ?? row.raw.authIndex ?? row.authIndex);
+            if (authIndex) {
+              void authFilesApi.resetQuota(authIndex, authFilesRequestScope).catch((resetErr) => {
+                console.warn('[Accounts] Failed to reset gateway cooldown quota on healthy quota refresh:', resetErr);
+              });
+            }
+          }
           invalidateCodexCredentialStatusForSelectionKeys([row.selectionKey], {
             supersedeAuthenticationActionEvidence: true,
             supersedeQuotaActionEvidence: healthyQuota,
@@ -6187,9 +6196,31 @@ export function AccountsPage() {
                   }));
                 });
               }
+              const authIndex = normalizeAuthIndex(row.raw['auth_index'] ?? row.raw.authIndex ?? row.authIndex);
+              if (authIndex && !row.raw.disabled) {
+                void authFilesApi.resetQuota(authIndex, authFilesRequestScope).catch((resetErr) => {
+                  console.warn('[Accounts] Failed to reset gateway cooldown quota after consuming reset credit:', resetErr);
+                });
+              }
+              invalidateCodexCredentialStatusForSelectionKeys([row.selectionKey], {
+                supersedeAuthenticationActionEvidence: true,
+                supersedeQuotaActionEvidence: true,
+                supersedeCooldownEvidence: true,
+              });
               showNotification(t('codex_quota.reset_success', { name: displayName }), 'success');
             } catch {
               endResetTransaction();
+              const authIndex = normalizeAuthIndex(row.raw['auth_index'] ?? row.raw.authIndex ?? row.authIndex);
+              if (authIndex && !row.raw.disabled) {
+                void authFilesApi.resetQuota(authIndex, authFilesRequestScope).catch((resetErr) => {
+                  console.warn('[Accounts] Failed to reset gateway cooldown quota after consuming reset credit:', resetErr);
+                });
+              }
+              invalidateCodexCredentialStatusForSelectionKeys([row.selectionKey], {
+                supersedeAuthenticationActionEvidence: true,
+                supersedeQuotaActionEvidence: true,
+                supersedeCooldownEvidence: true,
+              });
               showNotification(
                 t('codex_quota.reset_partial_success', { name: displayName }),
                 'warning'
@@ -6203,6 +6234,7 @@ export function AccountsPage() {
     [
       canResetCodexQuota,
       getDisplayAccount,
+      invalidateCodexCredentialStatusForSelectionKeys,
       setCodexQuota,
       showConfirmation,
       showNotification,
