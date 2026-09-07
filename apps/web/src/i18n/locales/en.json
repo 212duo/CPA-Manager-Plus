@@ -1560,6 +1560,8 @@
     "filter_unknown": "Other",
     "models_button": "Models",
     "models_loading": "Loading model list...",
+    "models_refresh_success": "Model list refreshed",
+    "models_refresh_partial": "Model list refreshed, but model definitions failed: {{message}}",
     "models_empty": "No available models for this credential",
     "models_empty_desc": "This credential may not yet be loaded by the server, or no models are bound to it in the AI providers configuration. Open the AI providers page to verify binding.",
     "models_unsupported": "This feature is not supported in the current version",

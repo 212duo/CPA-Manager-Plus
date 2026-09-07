@@ -1558,6 +1558,8 @@
     "filter_unknown": "其他",
     "models_button": "模型",
     "models_loading": "正在載入模型清單...",
+    "models_refresh_success": "模型列表已刷新",
+    "models_refresh_partial": "模型列表已刷新，但模型定義刷新失敗：{{message}}",
     "models_empty": "該憑證暫無可用模型",
     "models_empty_desc": "該驗證憑證可能尚未被伺服器載入,或在 AI 提供商中尚未綁定任何模型。可前往 AI 提供商配置頁檢查綁定狀態。",
     "models_unsupported": "目前版本不支援此功能",
