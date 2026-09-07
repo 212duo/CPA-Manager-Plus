@@ -4575,6 +4575,9 @@ export function AccountsPage() {
           {
             provider,
             getLabel: (snapshot) => {
+              if (provider === 'claude' && snapshot.provider_window_id === 'extra-usage') {
+                return t('claude_quota.extra_usage_label');
+              }
               const kind = snapshot.window_kind;
               if (kind === 'rolling_24h') {
                 return t('accounts.detail_snapshot_window_rolling_24h');

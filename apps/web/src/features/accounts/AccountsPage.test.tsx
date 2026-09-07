@@ -8391,6 +8391,57 @@ describe('AccountsPage replacement flows', () => {
     expect(readText(renderer.root)).toContain('Opus model quota');
   });
 
+  it('localizes snapshot-only Claude extra usage quota details', async () => {
+    const file = {
+      name: 'claude-extra-usage-snapshot.json',
+      type: 'claude',
+      provider: 'claude',
+      authIndex: 'claude-extra-usage-snapshot-1',
+      account: 'claude-extra-usage-snapshot@example.com',
+      priority: 0,
+      disabled: false,
+    } as AuthFileItem;
+    mocks.files = [file];
+    const selectionKey = getAuthFileSelectionKey(file);
+    mocks.location = {
+      pathname: '/accounts',
+      search: `?account=${encodeURIComponent(selectionKey)}&tab=quota`,
+    };
+    vi.mocked(accountQuotaSnapshotApi.query).mockResolvedValue({
+      generated_at_ms: 2_000,
+      items: [
+        {
+          row_key: selectionKey,
+          account_key: selectionKey,
+          provider: 'claude',
+          windows: [
+            {
+              provider_window_id: 'extra-usage',
+              window_kind: 'monthly',
+              window_mode: 'unknown',
+              model_scope_kind: 'all',
+              source: 'api_query',
+              observed_at_ms: 2_000,
+              boundary_accuracy: 'unknown',
+              used_percent: 30,
+              remaining_percent: 70,
+              stale: false,
+            },
+          ],
+        },
+      ],
+    });
+
+    const renderer = await renderAccountsPage();
+    await flushPromises();
+    await flushPromises();
+
+    const otherGroup = renderer.root.findByProps({ 'data-quota-window-group': 'other' });
+    expect(otherGroup.findAllByProps({ 'data-quota-card-mode': 'other' })).toHaveLength(1);
+    expect(readText(otherGroup)).toContain('claude_quota.extra_usage_label');
+    expect(readText(otherGroup)).not.toContain('extra-usage');
+  });
+
   it('keeps Kimi standard windows alongside top-level summary data', async () => {
     const file = {
       name: 'kimi-standard.json',
