@@ -161,6 +161,8 @@ const formatNumericTimestamp = (date: Date, includeSeconds = false) => {
   return includeSeconds ? `${base}:${padTimestampPart(date.getSeconds())}` : base;
 };
 
+const QUOTA_RESET_DAY_MS = 24 * 60 * 60 * 1000;
+
 export const formatTimestamp = (value: number | null, _locale: string, includeSeconds = false) => {
   const date = resolveValidTimestampDate(value);
   if (!date) return '-';
@@ -188,6 +190,21 @@ export const formatQuotaResetTimestamp = (value: number | null | undefined, _loc
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '-';
   return formatNumericTimestamp(date);
+};
+
+export const getQuotaResetRemainingDays = (
+  expiresAtMs: number | null | undefined,
+  nowMs = Date.now()
+): number | null => {
+  if (
+    typeof expiresAtMs !== 'number' ||
+    !Number.isFinite(expiresAtMs) ||
+    expiresAtMs <= 0 ||
+    !Number.isFinite(nowMs)
+  ) {
+    return null;
+  }
+  return Math.max(0, Math.ceil((expiresAtMs - nowMs) / QUOTA_RESET_DAY_MS));
 };
 
 export const formatQuotaResetDisplay = (

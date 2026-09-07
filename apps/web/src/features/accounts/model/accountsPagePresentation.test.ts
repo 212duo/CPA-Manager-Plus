@@ -6,6 +6,7 @@ import {
   formatHistorySuccessRate,
   formatMoney,
   formatQuotaResetDisplay,
+  getQuotaResetRemainingDays,
   formatQuotaResetTimestamp,
   formatQuotaResetTooltipParams,
   formatTimestamp,
@@ -112,6 +113,15 @@ describe('accountsPagePresentation', () => {
         recoverAtMs
       )
     ).toEqual({ resetAt: '07/30 10:05', recoverAt: '07/31 11:15' });
+  });
+
+  it('calculates reset-credit remaining days with an inclusive countdown boundary', () => {
+    const nowMs = new Date(2026, 8, 11, 6, 33).getTime();
+
+    expect(getQuotaResetRemainingDays(nowMs + 10 * 24 * 60 * 60 * 1000, nowMs)).toBe(10);
+    expect(getQuotaResetRemainingDays(nowMs + 10 * 24 * 60 * 60 * 1000 - 1, nowMs)).toBe(10);
+    expect(getQuotaResetRemainingDays(nowMs - 1, nowMs)).toBe(0);
+    expect(getQuotaResetRemainingDays(null, nowMs)).toBeNull();
   });
 
   it('keeps standard quota windows as the only list selection when available', () => {

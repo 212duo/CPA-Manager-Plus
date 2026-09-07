@@ -386,6 +386,9 @@ const CREDENTIAL_EVIDENCE_UNIQUE_FILE_NAME_BOUNDARY_PREFIX = 'unique-file-name\u
 const CREDENTIAL_EVIDENCE_SOURCE_FILE_BOUNDARY_PREFIX = 'source-file\u0000';
 const CREDENTIAL_EVIDENCE_PROVIDER_BOUNDARY_PREFIX = 'provider\u0000';
 
+const getAccountQuotaRefreshKey = (row: AccountRow): string =>
+  `${row.provider}:${getQuotaCredentialStoreKey(row.raw)}`;
+
 type AccountQuotaRefreshOutcome =
   | { status: 'success' }
   | { status: 'error'; error: string }
@@ -1294,6 +1297,9 @@ export function AccountsPage() {
   const inspectionSnapshotRef = useRef(inspectionSnapshot);
   inspectionSnapshotRef.current = inspectionSnapshot;
   const [quotaRefreshing, setQuotaRefreshing] = useState(false);
+  const [manualQuotaRefreshingKeys, setManualQuotaRefreshingKeys] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
   const [historyRefreshing, setHistoryRefreshing] = useState(false);
   const [accountHistoryRefreshRevision, setAccountHistoryRefreshRevision] = useState(0);
   const [accountHistoryAutoRefreshRevision, setAccountHistoryAutoRefreshRevision] = useState(0);
@@ -1510,6 +1516,7 @@ export function AccountsPage() {
     promise: Promise<void>;
   } | null>(null);
   const quotaRefreshGenerationRef = useRef(0);
+  const manualQuotaRefreshingKeysRef = useRef<Set<string>>(new Set());
   const accountHistoryRefreshRequestIdRef = useRef(0);
   const accountHistoryRefreshPromiseRef = useRef<{
     key: string;
@@ -1608,6 +1615,8 @@ export function AccountsPage() {
     credentialMutationMarkerExhaustedRef.current.clear();
     quotaRefreshGenerationRef.current += 1;
     quotaRefreshBatchRef.current = null;
+    manualQuotaRefreshingKeysRef.current.clear();
+    setManualQuotaRefreshingKeys(new Set());
     quotaRequestVersionsRef.current.forEach((version, key) => {
       quotaRequestVersionsRef.current.set(key, version + 1);
     });
@@ -5994,13 +6003,57 @@ export function AccountsPage() {
 
   const refreshAccountQuota = useCallback(
     async (row: AccountRow): Promise<void> => {
-      await refreshQuotaRows([row]);
-      if (selectedRowKeyRef.current === row.selectionKey) {
-        setAccountQuotaRefreshRevision((current) => current + 1);
+      if (row.runtimeOnly) return;
+      const refreshKey = getAccountQuotaRefreshKey(row);
+      if (manualQuotaRefreshingKeysRef.current.has(refreshKey)) return;
+
+      manualQuotaRefreshingKeysRef.current.add(refreshKey);
+      setManualQuotaRefreshingKeys((current) => {
+        const next = new Set(current);
+        next.add(refreshKey);
+        return next;
+      });
+
+      const generation = quotaRefreshGenerationRef.current;
+      const isCurrentContext = () =>
+        quotaRefreshGenerationRef.current === generation &&
+        oauthEditorConnectionFingerprintRef.current === connectionFingerprint;
+
+      try {
+        const result = await refreshQuotaForRow(row);
+        if (!isCurrentContext() || result.status === 'ignored') return;
+
+        const rawName = row.accountLabel || row.fileName;
+        const name = accountDisplayMode === 'full' ? rawName : maskQuotaAccountText(rawName);
+        if (result.status === 'error') {
+          showNotification(
+            t('accounts.quota_refresh_failed', { name, message: result.error }),
+            'error'
+          );
+        } else {
+          showNotification(t('accounts.quota_refresh_success', { name }), 'success');
+        }
+
+        if (selectedRowKeyRef.current === row.selectionKey) {
+          setAccountQuotaRefreshRevision((current) => current + 1);
+        }
+      } finally {
+        if (isCurrentContext()) {
+          manualQuotaRefreshingKeysRef.current.delete(refreshKey);
+          setManualQuotaRefreshingKeys((current) => {
+            if (!current.has(refreshKey)) return current;
+            const next = new Set(current);
+            next.delete(refreshKey);
+            return next;
+          });
+        }
       }
     },
-    [refreshQuotaRows]
+    [accountDisplayMode, connectionFingerprint, refreshQuotaForRow, showNotification, t]
   );
+
+  const isManualQuotaRefreshing = (row: AccountRow): boolean =>
+    manualQuotaRefreshingKeys.has(getAccountQuotaRefreshKey(row));
 
   const refreshAccountHistory = useCallback(
     (row: AccountRow): Promise<void> => {
@@ -7142,7 +7195,10 @@ export function AccountsPage() {
           iconOnly
           className={`${styles.accountIconButton} ${styles.accountIconButtonRefresh}`}
           onClick={() => void refreshAccountQuota(row)}
-          disabled={disableControls || quotaRefreshing || row.runtimeOnly}
+          disabled={
+            disableControls || quotaRefreshing || isManualQuotaRefreshing(row) || row.runtimeOnly
+          }
+          loading={isManualQuotaRefreshing(row)}
           title={t('accounts.refresh_quota')}
           aria-label={t('accounts.refresh_quota')}
         >
@@ -7854,6 +7910,7 @@ export function AccountsPage() {
     };
     const selectedCredentialRefreshing =
       credentialRefreshing[getAuthFileSelectionKey(selectedRow.raw)] === true;
+    const selectedQuotaRefreshing = isManualQuotaRefreshing(selectedRow);
     const drawerMoreItems: DropdownMenuItem[] = [
       {
         key: 'models',
@@ -7967,10 +8024,10 @@ export function AccountsPage() {
             <Button
               variant="secondary"
               onClick={() => void refreshAccountQuota(selectedRow)}
-              loading={quotaRefreshing}
-              disabled={disableControls || selectedRow.runtimeOnly}
+              loading={quotaRefreshing || selectedQuotaRefreshing}
+              disabled={disableControls || selectedQuotaRefreshing || selectedRow.runtimeOnly}
             >
-              {!quotaRefreshing ? <IconRefreshCw size={16} /> : null}
+              {!quotaRefreshing && !selectedQuotaRefreshing ? <IconRefreshCw size={16} /> : null}
               {t('accounts.refresh_quota')}
             </Button>
             <Button

@@ -10081,6 +10081,63 @@ describe('AccountsPage replacement flows', () => {
     expect(mocks.getAccountHistory).not.toHaveBeenCalled();
   });
 
+  it('allows different credential quota refreshes to run concurrently', async () => {
+    const first = makeCodexFile('codex-first.json', 'auth-first', 'first@example.com');
+    const second = makeCodexFile('codex-second.json', 'auth-second', 'second@example.com');
+    mocks.files = [first, second];
+    const firstQuota = createDeferred<CodexQuotaData>();
+    const secondQuota = createDeferred<CodexQuotaData>();
+    const quotaFetch = vi
+      .spyOn(CODEX_CONFIG, 'fetchQuota')
+      .mockReturnValueOnce(firstQuota.promise)
+      .mockReturnValueOnce(secondQuota.promise);
+    const renderer = await renderAccountsPage();
+
+    await act(async () => {
+      findAccountCardButtonByAriaLabel(
+        renderer,
+        getAuthFileSelectionKey(first),
+        'accounts.refresh_quota'
+      ).props.onClick();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      findAccountCardButtonByAriaLabel(
+        renderer,
+        getAuthFileSelectionKey(first),
+        'accounts.refresh_quota'
+      ).props.onClick();
+      findAccountCardButtonByAriaLabel(
+        renderer,
+        getAuthFileSelectionKey(second),
+        'accounts.refresh_quota'
+      ).props.onClick();
+      await Promise.resolve();
+    });
+
+    expect(quotaFetch).toHaveBeenCalledTimes(2);
+    expect(
+      findAccountCardButtonByAriaLabel(
+        renderer,
+        getAuthFileSelectionKey(first),
+        'accounts.refresh_quota'
+      ).props.disabled
+    ).toBe(true);
+    expect(
+      findAccountCardButtonByAriaLabel(
+        renderer,
+        getAuthFileSelectionKey(second),
+        'accounts.refresh_quota'
+      ).props.disabled
+    ).toBe(true);
+
+    firstQuota.resolve(makeCodexQuotaData());
+    secondQuota.resolve(makeCodexQuotaData());
+    await act(async () => {
+      await Promise.resolve();
+    });
+  });
+
   it('allows a disabled credential to request its latest quota', async () => {
     const file = {
       ...makeCodexFile('codex-disabled.json', 'auth-disabled', 'disabled@example.com'),
@@ -13315,7 +13372,7 @@ describe('AccountsPage replacement flows', () => {
     );
     expect(
       readText(renderer.root.findByProps({ 'data-quota-reset-credit-expiry': 'reset-credit-1' }))
-    ).toBe(formatQuotaResetTimestamp(resetCreditExpiresAtMs, 'en'));
+    ).toContain(formatQuotaResetTimestamp(resetCreditExpiresAtMs, 'en'));
     expect(
       renderer.root.findAllByProps({ 'data-account-quota-reset-records': 'true' })
     ).toHaveLength(1);
@@ -13328,6 +13385,7 @@ describe('AccountsPage replacement flows', () => {
     expect(treeText(renderer)).toContain('codex_quota.reset_credits_available_label');
     expect(treeText(renderer)).toContain('codex_quota.reset_credits_unit');
     expect(treeText(renderer)).toContain('codex_quota.reset_credits_expected_expiry_label');
+    expect(treeText(renderer)).toContain('codex_quota.reset_credit_expiry_remaining_days');
 
     const resetAction = renderer.root.findByProps({ 'data-quota-reset-action': 'true' });
     expect(resetAction.props.disabled).toBe(false);
