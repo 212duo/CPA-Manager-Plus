@@ -140,7 +140,7 @@ describe('QuotaWindowCard', () => {
     expect(renderer.root.findAllByProps({ 'data-quota-model-comparison': 'true' })).toHaveLength(0);
   });
 
-  it('keeps a fixed billing interval in standard mode when mode is inferred', () => {
+  it('infers other mode for a fixed billing interval', () => {
     const renderer = renderCard(
       makeWindow({
         kind: 'billing',
@@ -151,11 +151,34 @@ describe('QuotaWindowCard', () => {
       })
     );
 
-    expect(renderer.root.findAllByProps({ 'data-quota-card-mode': 'standard' })).toHaveLength(1);
+    expect(renderer.root.findAllByProps({ 'data-quota-card-mode': 'other' })).toHaveLength(1);
     expect(renderer.root.findAllByProps({ 'data-quota-standard-comparison': 'true' })).toHaveLength(
-      1
+      0
     );
+  });
+
+  it('renders standard card with incomplete boundary notice for unknown boundary standard window', () => {
+    const renderer = renderCard(
+      makeWindow({
+        kind: 'weekly',
+        windowMode: 'unknown',
+        modelScope: { kind: 'all', complete: true },
+        limitWindowSeconds: null,
+        fromMs: null,
+        toMs: null,
+        cycleStartMs: null,
+        cycleEndMs: null,
+        usage: undefined,
+        currentUsage: undefined,
+        previousUsage: undefined,
+        forecast: undefined,
+      })
+    );
+
+    expect(renderer.root.findAllByProps({ 'data-quota-card-mode': 'standard' })).toHaveLength(1);
     expect(renderer.root.findAllByProps({ 'data-quota-card-mode': 'other' })).toHaveLength(0);
+    const cardText = readText(renderer.root);
+    expect(cardText).toContain('accounts.detail_window_boundary_incomplete');
   });
 
   it('uses semantic colors for the current usage metric icons', () => {

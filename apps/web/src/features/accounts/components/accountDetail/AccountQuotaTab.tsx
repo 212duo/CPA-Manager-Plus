@@ -15,8 +15,7 @@ import {
   formatQuotaResetTimestamp,
 } from '@/features/accounts/model/accountsPagePresentation';
 import {
-  isIntervalAccountQuotaWindow,
-  isModelScopedAccountQuotaWindow,
+  getAccountQuotaSemanticGroup,
 } from '@/features/accounts/model/accountQuotaDisplayWindows';
 import { formatCompactNumber, formatUsd } from '@/utils/usage';
 import { QuotaWindowCard } from '../QuotaWindowCard';
@@ -116,12 +115,14 @@ export function AccountQuotaTab({
   const history = detailView.history;
   const allWindows = detailView.quota.windows;
   const standardWindows = allWindows.filter(
-    (window) => isIntervalAccountQuotaWindow(window) && !isModelScopedAccountQuotaWindow(window)
+    (window) => getAccountQuotaSemanticGroup(window) === 'standard'
   );
   const modelWindows = allWindows.filter(
-    (window) => isIntervalAccountQuotaWindow(window) && isModelScopedAccountQuotaWindow(window)
+    (window) => getAccountQuotaSemanticGroup(window) === 'model'
   );
-  const otherQuotaItems = allWindows.filter((window) => !isIntervalAccountQuotaWindow(window));
+  const otherQuotaItems = allWindows.filter(
+    (window) => getAccountQuotaSemanticGroup(window) === 'other'
+  );
 
   const formatNumber = (value: number) => new Intl.NumberFormat(i18n.language).format(value);
   const formatTime = (value: number | null) =>
