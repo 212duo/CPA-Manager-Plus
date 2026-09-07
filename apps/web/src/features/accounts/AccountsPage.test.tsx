@@ -8162,7 +8162,7 @@ describe('AccountsPage replacement flows', () => {
     );
   });
 
-  it('keeps a fixed xAI billing period in detail standard mode while showing billing and PAYG fallbacks', async () => {
+  it('keeps a fixed xAI billing period in detail other mode while showing billing and PAYG fallbacks', async () => {
     const file = {
       name: 'xai-fixed-billing.json',
       type: 'xai',
@@ -8211,11 +8211,10 @@ describe('AccountsPage replacement flows', () => {
     });
     await flushPromises();
 
-    const standardGroup = renderer.root.findByProps({ 'data-quota-window-group': 'standard' });
+    const standardGroup = renderer.root.findAllByProps({ 'data-quota-window-group': 'standard' });
     const otherGroup = renderer.root.findByProps({ 'data-quota-window-group': 'other' });
-    expect(standardGroup.findAllByType(QuotaWindowCard)).toHaveLength(1);
-    expect(standardGroup.findByProps({ 'data-quota-card-mode': 'standard' })).toBeTruthy();
-    expect(standardGroup.findByProps({ 'data-quota-standard-comparison': 'true' })).toBeTruthy();
+    expect(standardGroup).toHaveLength(0);
+    expect(otherGroup.findAllByType(QuotaWindowCard)).toHaveLength(4);
     expect(readText(otherGroup)).toContain('xai_quota.monthly_credits');
     expect(readText(otherGroup)).toContain('Grok Code Fast');
   });
@@ -8392,7 +8391,7 @@ describe('AccountsPage replacement flows', () => {
     expect(readText(renderer.root)).toContain('Opus model quota');
   });
 
-  it('keeps Kimi standard windows ahead of summary data', async () => {
+  it('keeps Kimi standard windows alongside top-level summary data', async () => {
     const file = {
       name: 'kimi-standard.json',
       type: 'kimi',
@@ -8430,7 +8429,7 @@ describe('AccountsPage replacement flows', () => {
     const card = findAccountCardByKey(renderer, selectionKey);
 
     expect(readText(card)).toContain('5H');
-    expect(readText(card)).not.toContain('SUM');
+    expect(readText(card)).toContain('SUM');
     expect(readText(card)).not.toContain('accounts.quota_details_only');
   });
 
