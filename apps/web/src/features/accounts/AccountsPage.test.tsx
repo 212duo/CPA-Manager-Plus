@@ -13596,7 +13596,7 @@ describe('AccountsPage replacement flows', () => {
     );
   });
 
-  it('resets gateway cooldown quota when refreshed quota is healthy', async () => {
+  it('does not reset gateway cooldown on normal healthy quota refresh', async () => {
     const file = makeCodexFile('codex-healthy.json', 'auth-healthy-1', 'healthy@example.com');
     mocks.files = [file];
     vi.spyOn(CODEX_CONFIG, 'fetchQuota').mockResolvedValue({
@@ -13618,7 +13618,92 @@ describe('AccountsPage replacement flows', () => {
     });
     await flushPromises();
 
-    expect(mocks.resetQuota).toHaveBeenCalledWith('auth-healthy-1', expect.anything());
+    expect(mocks.resetQuota).not.toHaveBeenCalled();
+  });
+
+  it('warns and skips gateway reset when upstream reports nothing_to_reset', async () => {
+    mocks.quotaState.codexQuota = {
+      'codex.json': {
+        status: 'success',
+        authFileKey: 'codex.json::auth-1',
+        windows: [],
+        rateLimitResetCreditsAvailableCount: 1,
+      },
+    };
+    vi.spyOn(CODEX_CONFIG, 'fetchQuota').mockResolvedValue(
+      makeCodexQuotaData(1, [makeResetCredit('fresh-credit-1')])
+    );
+    mocks.consumeResetCredit.mockResolvedValueOnce({
+      statusCode: 200,
+      hasStatusCode: true,
+      header: {},
+      bodyText: JSON.stringify({ code: 'nothing_to_reset' }),
+      body: { code: 'nothing_to_reset' },
+    });
+
+    const renderer = await renderAccountsPage();
+    await openCodexQuotaTab(renderer, 'codex.json');
+    await act(async () => {
+      renderer.root.findByProps({ 'data-quota-reset-action': 'true' }).props.onClick();
+    });
+    await flushPromises();
+    const confirmation = mocks.showConfirmation.mock.calls[0]?.[0] as {
+      onConfirm: () => Promise<void>;
+    };
+    await act(async () => {
+      await confirmation.onConfirm();
+    });
+    await flushPromises();
+
+    expect(mocks.consumeResetCredit).toHaveBeenCalledTimes(1);
+    expect(mocks.resetQuota).not.toHaveBeenCalled();
+    expect(mocks.showNotification).toHaveBeenCalledWith(
+      expect.stringContaining('codex_quota.reset_nothing_to_reset'),
+      'warning'
+    );
+  });
+
+  it('reports partial success when gateway reset fails after credit consumed', async () => {
+    mocks.quotaState.codexQuota = {
+      'codex.json': {
+        status: 'success',
+        authFileKey: 'codex.json::auth-1',
+        windows: [],
+        rateLimitResetCreditsAvailableCount: 1,
+      },
+    };
+    vi.spyOn(CODEX_CONFIG, 'fetchQuota').mockResolvedValue(
+      makeCodexQuotaData(1, [makeResetCredit('fresh-credit-1')])
+    );
+    mocks.consumeResetCredit.mockResolvedValueOnce({
+      statusCode: 200,
+      hasStatusCode: true,
+      header: {},
+      bodyText: JSON.stringify({ code: 'reset' }),
+      body: { code: 'reset' },
+    });
+    mocks.resetQuota.mockRejectedValueOnce(new Error('Gateway timeout'));
+
+    const renderer = await renderAccountsPage();
+    await openCodexQuotaTab(renderer, 'codex.json');
+    await act(async () => {
+      renderer.root.findByProps({ 'data-quota-reset-action': 'true' }).props.onClick();
+    });
+    await flushPromises();
+    const confirmation = mocks.showConfirmation.mock.calls[0]?.[0] as {
+      onConfirm: () => Promise<void>;
+    };
+    await act(async () => {
+      await confirmation.onConfirm();
+    });
+    await flushPromises();
+
+    expect(mocks.consumeResetCredit).toHaveBeenCalledTimes(1);
+    expect(mocks.resetQuota).toHaveBeenCalledWith('auth-1', expect.anything());
+    expect(mocks.showNotification).toHaveBeenCalledWith(
+      expect.stringContaining('codex_quota.reset_gateway_failed'),
+      'warning'
+    );
   });
 
   it('keeps reset unavailable for runtime-only credentials', async () => {
