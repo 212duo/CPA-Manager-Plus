@@ -141,8 +141,7 @@ export const getAccountQuotaSemanticGroup = (
     kind === 'billing' ||
     kind === 'payg' ||
     kind === 'product' ||
-    kind === 'summary' ||
-    kind === 'unknown'
+    kind === 'summary'
   ) {
     return 'other';
   }
@@ -156,7 +155,7 @@ export const getAccountQuotaSemanticGroup = (
     return isModelScopedAccountQuotaWindow(window) ? 'model' : 'standard';
   }
 
-  if (kind === undefined && isIntervalAccountQuotaWindow(window)) {
+  if ((kind === undefined || kind === 'unknown') && isIntervalAccountQuotaWindow(window)) {
     return isModelScopedAccountQuotaWindow(window) ? 'model' : 'standard';
   }
 

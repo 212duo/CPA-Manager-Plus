@@ -16,6 +16,7 @@ import {
 import type { AccountRow } from './accountRows';
 import {
   buildAccountQuotaDisplayWindow,
+  getAccountQuotaSemanticGroup,
   type AccountQuotaDisplayWindow,
 } from './accountQuotaDisplayWindows';
 import { buildAccountQuotaWindowDefinitions } from './accountQuotaWindowDefinitions';
@@ -984,6 +985,35 @@ describe('account quota snapshots', () => {
         quotaProgressObservedAtMs: null,
       },
     });
+  });
+
+  it('keeps an unknown-kind fixed interval snapshot in the model semantic group after restore', () => {
+    const [restored] = mergeAccountQuotaSnapshotWindows(
+      [],
+      [
+        makeSnapshot({
+          provider_window_id: 'custom-12h',
+          window_kind: 'unknown',
+          window_mode: 'fixed',
+          model_scope_kind: 'family',
+          model_scope_key: 'gemini',
+          duration_seconds: 43_200,
+          cycle_end_ms: 43_201_000,
+        }),
+      ],
+      { provider: 'antigravity' }
+    );
+
+    expect(restored).toMatchObject({
+      kind: 'unknown',
+      windowMode: 'fixed',
+      modelScope: { kind: 'family', key: 'gemini', complete: true },
+      display: {
+        kind: 'unknown',
+        windowMode: 'fixed',
+      },
+    });
+    expect(getAccountQuotaSemanticGroup(restored.display)).toBe('model');
   });
 
   it('does not restamp remaining-only quota under a newer snapshot observation', () => {

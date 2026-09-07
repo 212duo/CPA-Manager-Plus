@@ -170,6 +170,44 @@ describe('accountQuotaDisplayWindows', () => {
       expect(getAccountQuotaSemanticGroup(window)).toBe('model');
     });
 
+    it('classifies an explicit unknown fixed account-wide interval as standard quota', () => {
+      const window = {
+        kind: 'unknown' as const,
+        windowMode: 'fixed' as const,
+        source: 'antigravity' as const,
+        modelScope: { kind: 'all' as const, complete: true },
+      };
+
+      expect(isIntervalAccountQuotaWindow(window)).toBe(true);
+      expect(getAccountQuotaSemanticGroup(window)).toBe('standard');
+      expect(isStandardAccountQuotaListWindow(window)).toBe(true);
+    });
+
+    it('classifies an explicit unknown fixed model-scoped interval as model quota', () => {
+      const window = {
+        kind: 'unknown' as const,
+        windowMode: 'fixed' as const,
+        source: 'antigravity' as const,
+        modelScope: { kind: 'family' as const, key: 'gemini', complete: true },
+      };
+
+      expect(isIntervalAccountQuotaWindow(window)).toBe(true);
+      expect(getAccountQuotaSemanticGroup(window)).toBe('model');
+      expect(isStandardAccountQuotaListWindow(window)).toBe(false);
+    });
+
+    it('keeps an explicit unknown kind without a reliable interval as other quota', () => {
+      const window = {
+        kind: 'unknown' as const,
+        windowMode: 'unknown' as const,
+        source: 'antigravity' as const,
+        modelScope: { kind: 'all' as const, complete: true },
+      };
+
+      expect(isIntervalAccountQuotaWindow(window)).toBe(false);
+      expect(getAccountQuotaSemanticGroup(window)).toBe('other');
+    });
+
     it('classifies fixed billing window as other semantic group without entering standard quota', () => {
       const window = {
         kind: 'billing' as const,
