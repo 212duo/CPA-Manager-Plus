@@ -1,6 +1,10 @@
 import type { TFunction } from 'i18next';
 import { ANTIGRAVITY_CONFIG } from '@/components/quota';
-import { getQuotaWindowShortLabel } from '@/features/accounts/model/accountQuotaDisplayWindows';
+import {
+  getQuotaWindowShortLabel,
+  isModelScopedAccountQuotaWindow,
+  isStandardAccountQuotaListWindow,
+} from '@/features/accounts/model/accountQuotaDisplayWindows';
 import type {
   AccountQuotaWindowKind,
   AccountQuotaDisplayWindow,
@@ -315,30 +319,65 @@ const selectXaiQuotaListFallbackWindows = (
   return [billing, payg].filter((window): window is AccountQuotaDisplayWindow => Boolean(window));
 };
 
+const isCodexQuotaListCandidate = (window: AccountQuotaDisplayWindow): boolean =>
+  !isModelScopedAccountQuotaWindow(window) &&
+  (window.kind === 'five_hour' || window.kind === 'weekly' || window.kind === 'monthly');
+
+const selectCodexQuotaListWindows = (
+  quotaWindows: AccountQuotaDisplayWindow[]
+): AccountQuotaDisplayWindow[] => {
+  return quotaWindows.filter(isCodexQuotaListCandidate);
+};
+
+const selectKimiQuotaListWindows = (
+  quotaWindows: AccountQuotaDisplayWindow[]
+): AccountQuotaDisplayWindow[] => {
+  const topLevelWindows = quotaWindows.filter(
+    (window) => !window.key.startsWith('usage-')
+  );
+
+  const limits = topLevelWindows.filter(
+    (window) =>
+      window.key !== 'summary' &&
+      !isModelScopedAccountQuotaWindow(window) &&
+      (isStandardAccountQuotaListWindow(window) ||
+        window.kind === 'five_hour' ||
+        window.kind === 'daily' ||
+        window.kind === 'weekly')
+  );
+
+  const summary = topLevelWindows.find(
+    (window) => window.key === 'summary' && !isModelScopedAccountQuotaWindow(window)
+  );
+
+  if (summary) {
+    return [...limits, summary];
+  }
+  return limits;
+};
+
 export const selectAccountQuotaListWindows = (
   row: AccountRow,
   quotaWindows: AccountQuotaDisplayWindow[],
   standardQuotaWindows: AccountQuotaDisplayWindow[]
 ): AccountQuotaDisplayWindow[] => {
-  if (standardQuotaWindows.length > 0) return standardQuotaWindows;
-
   switch (row.provider) {
     case 'codex':
-      return [];
+      return selectCodexQuotaListWindows(quotaWindows);
+    case 'kimi':
+      return selectKimiQuotaListWindows(quotaWindows);
     case 'xai':
-      return selectXaiQuotaListFallbackWindows(quotaWindows);
+      return standardQuotaWindows.length > 0
+        ? standardQuotaWindows
+        : selectXaiQuotaListFallbackWindows(quotaWindows);
     case 'antigravity':
-      return quotaWindows.slice(0, 2);
-    case 'kimi': {
-      const summary = quotaWindows.find(
-        (window) => window.source === 'kimi' && window.key === 'summary'
-      );
-      return summary ? [summary] : [];
-    }
+      return standardQuotaWindows.length > 0
+        ? standardQuotaWindows
+        : quotaWindows.slice(0, 2);
     case 'claude':
-      return [];
+      return standardQuotaWindows;
     default:
-      return [];
+      return standardQuotaWindows;
   }
 };
 

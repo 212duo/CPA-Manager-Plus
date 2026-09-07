@@ -15,8 +15,7 @@ import {
   formatQuotaResetTimestamp,
 } from '@/features/accounts/model/accountsPagePresentation';
 import {
-  isIntervalAccountQuotaWindow,
-  isModelScopedAccountQuotaWindow,
+  getAccountQuotaSemanticGroup,
 } from '@/features/accounts/model/accountQuotaDisplayWindows';
 import { formatCompactNumber, formatUsd } from '@/utils/usage';
 import { QuotaWindowCard } from '../QuotaWindowCard';
@@ -116,12 +115,14 @@ export function AccountQuotaTab({
   const history = detailView.history;
   const allWindows = detailView.quota.windows;
   const standardWindows = allWindows.filter(
-    (window) => isIntervalAccountQuotaWindow(window) && !isModelScopedAccountQuotaWindow(window)
+    (window) => getAccountQuotaSemanticGroup(window) === 'standard'
   );
   const modelWindows = allWindows.filter(
-    (window) => isIntervalAccountQuotaWindow(window) && isModelScopedAccountQuotaWindow(window)
+    (window) => getAccountQuotaSemanticGroup(window) === 'model'
   );
-  const otherQuotaItems = allWindows.filter((window) => !isIntervalAccountQuotaWindow(window));
+  const otherQuotaItems = allWindows.filter(
+    (window) => getAccountQuotaSemanticGroup(window) === 'other'
+  );
 
   const formatNumber = (value: number) => new Intl.NumberFormat(i18n.language).format(value);
   const formatTime = (value: number | null) =>
@@ -212,7 +213,7 @@ export function AccountQuotaTab({
             <h3>{t('accounts.detail_quota_standard_title', { defaultValue: '标准额度' })}</h3>
             <span>
               {t('accounts.detail_quota_standard_desc', {
-                defaultValue: '按时间窗口统计并滚动更新',
+                defaultValue: '账号级配额；窗口边界可用时提供区间统计。',
               })}
             </span>
           </div>
@@ -239,7 +240,7 @@ export function AccountQuotaTab({
             <h3>{t('accounts.detail_quota_model_title', { defaultValue: '模型额度' })}</h3>
             <span>
               {t('accounts.detail_quota_model_desc', {
-                defaultValue: '按模型及窗口统计的配额信息',
+                defaultValue: '模型范围配额；窗口边界可用时提供区间统计。',
               })}
             </span>
           </div>
@@ -262,7 +263,7 @@ export function AccountQuotaTab({
             <h3>{t('accounts.detail_quota_other_items', { defaultValue: '其他额度项' })}</h3>
             <span>
               {t('accounts.detail_quota_other_items_desc', {
-                defaultValue: '金额、产品或缺少完整窗口边界的额度不生成区间统计。',
+                defaultValue: '金额、产品及其他不属于已识别标准或模型窗口的额度。',
               })}
             </span>
           </div>
