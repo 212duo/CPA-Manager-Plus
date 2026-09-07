@@ -7202,7 +7202,7 @@ export function AccountsPage() {
           title={t('accounts.refresh_quota')}
           aria-label={t('accounts.refresh_quota')}
         >
-          <IconRefreshCw size={15} />
+          {!isManualQuotaRefreshing(row) ? <IconRefreshCw size={15} /> : null}
         </Button>
         <Button
           variant="secondary"
