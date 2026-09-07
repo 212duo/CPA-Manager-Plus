@@ -884,6 +884,8 @@
     "batch_hint": "Select credentials to enable, disable, adjust priority, or delete in batches.",
     "refresh_quota": "Refresh quota",
     "refresh_history": "Refresh history",
+    "history_refresh_success": "History refreshed",
+    "history_refresh_failed": "Failed to refresh history: {{message}}",
     "enable": "Enable",
     "disable": "Disable",
     "no_refreshable_accounts": "No refreshable credentials selected",

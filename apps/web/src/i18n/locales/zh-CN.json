@@ -882,6 +882,8 @@
     "batch_hint": "选择凭证后可批量启用、禁用、调整优先级或删除。",
     "refresh_quota": "刷新额度",
     "refresh_history": "刷新历史",
+    "history_refresh_success": "历史数据已刷新",
+    "history_refresh_failed": "刷新历史失败：{{message}}",
     "enable": "启用",
     "disable": "禁用",
     "no_refreshable_accounts": "当前没有可刷新额度的凭证",

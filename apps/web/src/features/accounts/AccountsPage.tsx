@@ -391,6 +391,8 @@ type AccountQuotaRefreshOutcome =
   | { status: 'error'; error: string }
   | { status: 'ignored' };
 
+type AccountHistoryLoadOutcome = { status: 'success' } | { status: 'error'; error: string };
+
 const toAccountQuotaRefreshOutcome = <TState, TData>(
   result: QuotaRefreshResult<TState, TData> | null
 ): AccountQuotaRefreshOutcome => {
@@ -5464,11 +5466,14 @@ export function AccountsPage() {
   }, [activeView, detailTab, loadUsageValues, selectedRowKey, usageValuesAutoLoadKey]);
 
   const loadAccountHistory = useCallback(
-    async (targetEntries?: AccountHistoryTargetEntry[]) => {
+    async (
+      targetEntries?: AccountHistoryTargetEntry[]
+    ): Promise<Map<string, AccountHistoryLoadOutcome>> => {
       const entries = targetEntries ?? accountHistoryTargets;
       const mergeResult = targetEntries !== undefined;
       const controllerRef = mergeResult ? accountHistoryTargetAbortRef : accountHistoryAutoAbortRef;
       const managerServiceBase = featureAvailability.managerServiceBase;
+      const outcomes = new Map<string, AccountHistoryLoadOutcome>();
       if (!mergeResult) {
         const activeRowKeys = new Set(entries.map((entry) => entry.rowKey));
         accountHistoryRequestVersionsRef.current = retainAccountHistoryRowKeys(
@@ -5485,7 +5490,7 @@ export function AccountsPage() {
         controllerRef.current &&
         accountHistoryAutoRequestContextKeyRef.current === accountHistoryAutoContextKey
       ) {
-        return;
+        return outcomes;
       }
       controllerRef.current?.abort();
       controllerRef.current = null;
@@ -5510,7 +5515,7 @@ export function AccountsPage() {
           entries.forEach((entry) => next.delete(entry.rowKey));
           return next.size === current.size ? current : next;
         });
-        return;
+        return outcomes;
       }
 
       const controller = new AbortController();
@@ -5553,12 +5558,13 @@ export function AccountsPage() {
               return {
                 batch,
                 response: null,
-                error: err instanceof Error ? err.message : t('notification.load_failed'),
+                error:
+                  err instanceof Error && err.message ? err.message : t('notification.load_failed'),
               };
             }
           }
         );
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted) return outcomes;
         const nextHistory = new Map<string, MonitoringAccountHistoryItem>();
         const failedRows = new Map<string, string>();
         batchResults.forEach(({ batch, response, error }) => {
@@ -5612,11 +5618,27 @@ export function AccountsPage() {
           });
           return next;
         });
+        entries.forEach((entry) => {
+          const requestVersion = requestVersions.get(entry.rowKey);
+          if (accountHistoryRequestVersionsRef.current.get(entry.rowKey) !== requestVersion) {
+            return;
+          }
+          const error = failedRows.get(entry.rowKey);
+          outcomes.set(entry.rowKey, error ? { status: 'error', error } : { status: 'success' });
+        });
+        return outcomes;
       } catch (err: unknown) {
         const requestWasAborted = controller.signal.aborted;
         if (!requestWasAborted) controller.abort();
-        if (requestWasAborted) return;
-        const message = err instanceof Error ? err.message : t('notification.load_failed');
+        if (requestWasAborted) return outcomes;
+        const message =
+          err instanceof Error && err.message ? err.message : t('notification.load_failed');
+        entries.forEach((entry) => {
+          const requestVersion = requestVersions.get(entry.rowKey);
+          if (accountHistoryRequestVersionsRef.current.get(entry.rowKey) === requestVersion) {
+            outcomes.set(entry.rowKey, { status: 'error', error: message });
+          }
+        });
         setAccountHistoryErrorsByRowKey((current) => {
           const next = new Map(current);
           entries.forEach((entry) => {
@@ -5627,6 +5649,7 @@ export function AccountsPage() {
           });
           return next;
         });
+        return outcomes;
       } finally {
         if (controllerRef.current === controller) {
           controllerRef.current = null;
@@ -5919,7 +5942,8 @@ export function AccountsPage() {
           if (taskPlan.length === 1 && totalCount === 1) {
             const account = taskPlan[0]?.item;
             if (!account) return;
-            const name = account.accountLabel || account.fileName;
+            const rawName = account.accountLabel || account.fileName;
+            const name = accountDisplayMode === 'full' ? rawName : maskQuotaAccountText(rawName);
             if (firstError?.status === 'error') {
               showNotification(
                 t('accounts.quota_refresh_failed', { name, message: firstError.error }),
@@ -5962,7 +5986,7 @@ export function AccountsPage() {
       quotaRefreshBatchRef.current = { connectionFingerprint, generation, promise: batchPromise };
       return batchPromise;
     },
-    [connectionFingerprint, refreshQuotaForRow, showNotification, t]
+    [accountDisplayMode, connectionFingerprint, refreshQuotaForRow, showNotification, t]
   );
 
   const refreshAccountQuota = useCallback(
@@ -6006,13 +6030,23 @@ export function AccountsPage() {
         };
         setHistoryRefreshing(true);
         try {
-          await loadAccountHistory(buildAccountHistoryTargetEntries([row]));
+          const outcomes = await loadAccountHistory(buildAccountHistoryTargetEntries([row]));
           if (!isCurrentContext()) return;
           if (row.provider === CODEX_CONFIG.type) {
             await loadHeaderSnapshots();
             if (!isCurrentContext()) return;
           }
           setAccountHistoryRefreshRevision((current) => current + 1);
+          const outcome = outcomes.get(row.selectionKey);
+          if (!outcome) return;
+          if (outcome.status === 'error') {
+            showNotification(
+              t('accounts.history_refresh_failed', { message: outcome.error }),
+              'error'
+            );
+          } else {
+            showNotification(t('accounts.history_refresh_success'), 'success');
+          }
         } finally {
           if (accountHistoryRefreshRequestIdRef.current === requestId) {
             accountHistoryRefreshPromiseRef.current = null;
@@ -6033,6 +6067,8 @@ export function AccountsPage() {
       managementKey,
       managerConnectionFingerprint,
       requestHistoryAvailable,
+      showNotification,
+      t,
     ]
   );
 

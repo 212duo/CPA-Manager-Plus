@@ -10074,6 +10074,30 @@ describe('AccountsPage replacement flows', () => {
     );
   });
 
+  it('masks the account name in a single quota success notification', async () => {
+    mocks.location = { pathname: '/accounts', search: '?display=masked' };
+    const file = mocks.files[0];
+    vi.spyOn(CODEX_CONFIG, 'fetchQuota').mockResolvedValue(makeCodexQuotaData());
+    const renderer = await renderAccountsPage();
+
+    await act(async () => {
+      await findAccountCardButtonByAriaLabel(
+        renderer,
+        getAuthFileSelectionKey(file),
+        'accounts.refresh_quota'
+      ).props.onClick();
+    });
+
+    expect(mocks.showNotification).toHaveBeenCalledWith(
+      'accounts.quota_refresh_success:cod***@example.com',
+      'success'
+    );
+    expect(mocks.showNotification).not.toHaveBeenCalledWith(
+      'accounts.quota_refresh_success:codex@example.com',
+      'success'
+    );
+  });
+
   it('keeps the provider error in a single quota refresh notification', async () => {
     const file = mocks.files[0];
     installCodexQuotaStoreMutationMock();
@@ -10095,6 +10119,122 @@ describe('AccountsPage replacement flows', () => {
     expect(mocks.showNotification).not.toHaveBeenCalledWith(
       expect.stringContaining('0 / 1'),
       expect.anything()
+    );
+  });
+
+  it('masks the account name in a single quota failure notification', async () => {
+    mocks.location = { pathname: '/accounts', search: '?display=masked' };
+    const file = mocks.files[0];
+    installCodexQuotaStoreMutationMock();
+    vi.spyOn(CODEX_CONFIG, 'fetchQuota').mockRejectedValue(new Error('401 Unauthorized'));
+    const renderer = await renderAccountsPage();
+
+    await act(async () => {
+      await findAccountCardButtonByAriaLabel(
+        renderer,
+        getAuthFileSelectionKey(file),
+        'accounts.refresh_quota'
+      ).props.onClick();
+    });
+
+    expect(mocks.showNotification).toHaveBeenCalledWith(
+      'accounts.quota_refresh_failed:cod***@example.com:401 Unauthorized',
+      'error'
+    );
+    expect(mocks.showNotification).not.toHaveBeenCalledWith(
+      'accounts.quota_refresh_failed:codex@example.com:401 Unauthorized',
+      'error'
+    );
+  });
+
+  it('shows a success notification for an explicit history refresh', async () => {
+    const file = {
+      ...makeCodexFile(
+        'generic-history-success.json',
+        'auth-history-success',
+        'history@example.com'
+      ),
+      type: 'generic',
+      provider: 'generic',
+    } as AuthFileItem;
+    mocks.files = [file];
+    mocks.panelFeatureAvailability = {
+      checking: false,
+      managerServiceBase: 'http://manager.local:18317',
+      requestMonitoringAvailable: true,
+      serverCodexInspectionAvailable: false,
+    };
+    mocks.getAccountHistory.mockResolvedValue(makeAccountHistoryResponse([]));
+
+    const renderer = await renderAccountsPage();
+    await flushPromises();
+    await act(async () => {
+      findDetailButtonByName(renderer, file.name).props.onClick();
+    });
+    await act(async () => {
+      findHostButtonByText(renderer, 'accounts.detail_tab_quota').props.onClick();
+    });
+    await flushPromises();
+
+    mocks.showNotification.mockClear();
+    mocks.getAccountHistory.mockClear();
+    mocks.getAccountHistory.mockResolvedValueOnce(makeAccountHistoryResponse([]));
+    expect(mocks.showNotification).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await renderer.root.findByType(AccountQuotaTab).props.onRefreshHistory();
+    });
+
+    expect(mocks.showNotification).toHaveBeenCalledWith(
+      'accounts.history_refresh_success',
+      'success'
+    );
+  });
+
+  it('shows the provider error for an explicit history refresh failure', async () => {
+    const file = {
+      ...makeCodexFile(
+        'generic-history-failure.json',
+        'auth-history-failure',
+        'history@example.com'
+      ),
+      type: 'generic',
+      provider: 'generic',
+    } as AuthFileItem;
+    mocks.files = [file];
+    mocks.panelFeatureAvailability = {
+      checking: false,
+      managerServiceBase: 'http://manager.local:18317',
+      requestMonitoringAvailable: true,
+      serverCodexInspectionAvailable: false,
+    };
+    mocks.getAccountHistory.mockResolvedValue(makeAccountHistoryResponse([]));
+
+    const renderer = await renderAccountsPage();
+    await flushPromises();
+    await act(async () => {
+      findDetailButtonByName(renderer, file.name).props.onClick();
+    });
+    await act(async () => {
+      findHostButtonByText(renderer, 'accounts.detail_tab_quota').props.onClick();
+    });
+    await flushPromises();
+
+    mocks.showNotification.mockClear();
+    mocks.getAccountHistory.mockClear();
+    mocks.getAccountHistory.mockRejectedValueOnce(new Error('503 Service Unavailable'));
+
+    await act(async () => {
+      await renderer.root.findByType(AccountQuotaTab).props.onRefreshHistory();
+    });
+
+    expect(mocks.showNotification).toHaveBeenCalledWith(
+      'accounts.history_refresh_failed:503 Service Unavailable',
+      'error'
+    );
+    expect(mocks.showNotification).not.toHaveBeenCalledWith(
+      'accounts.history_refresh_success',
+      'success'
     );
   });
 
@@ -10346,6 +10486,7 @@ describe('AccountsPage replacement flows', () => {
       .mockResolvedValueOnce(makeAccountHistoryResponse([]))
       .mockImplementationOnce(() => currentHistory.promise);
 
+    mocks.showNotification.mockClear();
     await act(async () => {
       void renderer.root.findByType(AccountQuotaTab).props.onRefreshHistory();
       await Promise.resolve();
@@ -10393,6 +10534,12 @@ describe('AccountsPage replacement flows', () => {
     );
     await flushPromises();
 
+    expect(
+      mocks.showNotification.mock.calls.filter(
+        ([message]) =>
+          typeof message === 'string' && message.startsWith('accounts.history_refresh_')
+      )
+    ).toHaveLength(0);
     const recreatedCardText = readText(findAccountCardByKey(renderer, rowKey));
     expect(recreatedCardText).not.toContain('777');
     expect(recreatedCardText).not.toContain('accounts.health_reauth');
@@ -10441,6 +10588,7 @@ describe('AccountsPage replacement flows', () => {
       .mockResolvedValueOnce(makeAccountHistoryResponse([]))
       .mockImplementationOnce(() => currentHistory.promise);
 
+    mocks.showNotification.mockClear();
     await act(async () => {
       void renderer.root.findByType(AccountQuotaTab).props.onRefreshHistory();
       await Promise.resolve();
@@ -10464,6 +10612,12 @@ describe('AccountsPage replacement flows', () => {
     staleHistory.reject(new Error('stale history offline'));
     await flushPromises();
 
+    expect(
+      mocks.showNotification.mock.calls.filter(
+        ([message]) =>
+          typeof message === 'string' && message.startsWith('accounts.history_refresh_')
+      )
+    ).toHaveLength(0);
     const recreatedCardText = readText(findAccountCardByKey(renderer, rowKey));
     expect(recreatedCardText).not.toContain('accounts.history_unavailable');
     expect(recreatedCardText).not.toContain('accounts.history_recent_fallback');
@@ -10568,6 +10722,7 @@ describe('AccountsPage replacement flows', () => {
     const previousRefresh = createDeferred<AccountHistoryResponseForTest>();
     const nextRefresh = createDeferred<AccountHistoryResponseForTest>();
     let refreshCall = 0;
+    mocks.showNotification.mockClear();
     mocks.getAccountHistory.mockClear();
     mocks.getAccountHistory.mockImplementation(() => {
       refreshCall += 1;
@@ -10620,6 +10775,12 @@ describe('AccountsPage replacement flows', () => {
     previousRefresh.resolve(makeAccountHistoryResponse([]));
     await flushPromises();
     expect(renderer.root.findByType(AccountQuotaTab).props.historyRefreshing).toBe(true);
+    expect(
+      mocks.showNotification.mock.calls.filter(
+        ([message]) =>
+          typeof message === 'string' && message.startsWith('accounts.history_refresh_')
+      )
+    ).toHaveLength(0);
 
     nextRefresh.resolve(makeAccountHistoryResponse([]));
     await flushPromises();
