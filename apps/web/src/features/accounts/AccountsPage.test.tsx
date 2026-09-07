@@ -501,6 +501,8 @@ const { mocks } = vi.hoisted(() => {
         const parts: string[] = [];
         if (typeof options.name === 'string') parts.push(options.name);
         if (typeof options.count === 'number') parts.push(String(options.count));
+        if (typeof options.success === 'number') parts.push(String(options.success));
+        if (typeof options.total === 'number') parts.push(String(options.total));
         if (typeof options.message === 'string') parts.push(options.message);
         if (typeof options.requests === 'string') parts.push(options.requests);
         if (typeof options.tokens === 'string') parts.push(options.tokens);
@@ -10053,6 +10055,89 @@ describe('AccountsPage replacement flows', () => {
     expect(quotaFetch).toHaveBeenCalledWith(file, expect.anything(), expect.anything());
   });
 
+  it('shows an action-level success notification for a single quota refresh', async () => {
+    const file = mocks.files[0];
+    vi.spyOn(CODEX_CONFIG, 'fetchQuota').mockResolvedValue(makeCodexQuotaData());
+    const renderer = await renderAccountsPage();
+
+    await act(async () => {
+      await findAccountCardButtonByAriaLabel(
+        renderer,
+        getAuthFileSelectionKey(file),
+        'accounts.refresh_quota'
+      ).props.onClick();
+    });
+
+    expect(mocks.showNotification).toHaveBeenCalledWith(
+      'accounts.quota_refresh_success:codex@example.com',
+      'success'
+    );
+  });
+
+  it('keeps the provider error in a single quota refresh notification', async () => {
+    const file = mocks.files[0];
+    installCodexQuotaStoreMutationMock();
+    vi.spyOn(CODEX_CONFIG, 'fetchQuota').mockRejectedValue(new Error('401 Unauthorized'));
+    const renderer = await renderAccountsPage();
+
+    await act(async () => {
+      await findAccountCardButtonByAriaLabel(
+        renderer,
+        getAuthFileSelectionKey(file),
+        'accounts.refresh_quota'
+      ).props.onClick();
+    });
+
+    expect(mocks.showNotification).toHaveBeenCalledWith(
+      'accounts.quota_refresh_failed:codex@example.com:401 Unauthorized',
+      'error'
+    );
+    expect(mocks.showNotification).not.toHaveBeenCalledWith(
+      expect.stringContaining('0 / 1'),
+      expect.anything()
+    );
+  });
+
+  it('uses a warning summary and first error for a partially failed quota batch', async () => {
+    const first = makeCodexFile('first.json', 'auth-first', 'first@example.com');
+    const second = makeCodexFile('second.json', 'auth-second', 'second@example.com');
+    mocks.files = [first, second];
+    installCodexQuotaStoreMutationMock();
+    vi.spyOn(CODEX_CONFIG, 'fetchQuota')
+      .mockResolvedValueOnce(makeCodexQuotaData())
+      .mockRejectedValueOnce(new Error('401 Unauthorized'));
+    const renderer = await renderAccountsPage();
+
+    await act(async () => {
+      await findButtonByText(renderer, 'accounts.refresh_quota').props.onClick();
+    });
+
+    expect(mocks.showNotification).toHaveBeenCalledWith(
+      'accounts.quota_refresh_result_with_error:1:2:401 Unauthorized',
+      'warning'
+    );
+  });
+
+  it('uses an error summary when every quota refresh in a batch fails', async () => {
+    const first = makeCodexFile('first.json', 'auth-first', 'first@example.com');
+    const second = makeCodexFile('second.json', 'auth-second', 'second@example.com');
+    mocks.files = [first, second];
+    installCodexQuotaStoreMutationMock();
+    vi.spyOn(CODEX_CONFIG, 'fetchQuota')
+      .mockRejectedValueOnce(new Error('401 Unauthorized'))
+      .mockRejectedValueOnce(new Error('503 Service Unavailable'));
+    const renderer = await renderAccountsPage();
+
+    await act(async () => {
+      await findButtonByText(renderer, 'accounts.refresh_quota').props.onClick();
+    });
+
+    expect(mocks.showNotification).toHaveBeenCalledWith(
+      'accounts.quota_refresh_result_with_error:0:2:401 Unauthorized',
+      'error'
+    );
+  });
+
   it('clears stale single-account history when the refresh response cannot be correlated', async () => {
     mocks.files = [
       {
@@ -10631,10 +10716,7 @@ describe('AccountsPage replacement flows', () => {
       await firstRefresh;
     });
     expect(findButtonByText(renderer, 'accounts.refresh_quota').props.loading).toBe(true);
-    expect(mocks.showNotification).not.toHaveBeenCalledWith(
-      'accounts.quota_refresh_result',
-      expect.anything()
-    );
+    expect(mocks.showNotification).not.toHaveBeenCalled();
 
     await act(async () => {
       secondQuota.resolve(makeCodexQuotaData());
@@ -10642,7 +10724,10 @@ describe('AccountsPage replacement flows', () => {
     });
     expect(findButtonByText(renderer, 'accounts.refresh_quota').props.loading).toBe(false);
     expect(mocks.showNotification).toHaveBeenCalledTimes(1);
-    expect(mocks.showNotification).toHaveBeenCalledWith('accounts.quota_refresh_result', 'success');
+    expect(mocks.showNotification).toHaveBeenCalledWith(
+      'accounts.quota_refresh_success:b@example.com',
+      'success'
+    );
   });
 
   it('uses a healthy manual quota refresh to clear older inspection and operational evidence', async () => {

@@ -51,6 +51,7 @@ import {
   buildObservedCodexQuotaState,
   refreshQuotaWithConfig,
   type QuotaConfig,
+  type QuotaRefreshResult,
   type QuotaSetter,
 } from '@/components/quota';
 import { buildQuotaFailureState, getScopedQuotaState } from '@/components/quota/quotaConfigs';
@@ -384,6 +385,21 @@ const PASSIVE_ACCOUNTS_EVIDENCE_REFRESH_MS = 60_000;
 const CREDENTIAL_EVIDENCE_UNIQUE_FILE_NAME_BOUNDARY_PREFIX = 'unique-file-name\u0000';
 const CREDENTIAL_EVIDENCE_SOURCE_FILE_BOUNDARY_PREFIX = 'source-file\u0000';
 const CREDENTIAL_EVIDENCE_PROVIDER_BOUNDARY_PREFIX = 'provider\u0000';
+
+type AccountQuotaRefreshOutcome =
+  | { status: 'success' }
+  | { status: 'error'; error: string }
+  | { status: 'ignored' };
+
+const toAccountQuotaRefreshOutcome = <TState, TData>(
+  result: QuotaRefreshResult<TState, TData> | null
+): AccountQuotaRefreshOutcome => {
+  if (!result) return { status: 'ignored' };
+  return result.status === 'success'
+    ? { status: 'success' }
+    : { status: 'error', error: result.error };
+};
+
 interface CodexCredentialEvidenceInvalidation {
   file: AuthFileItem;
   invalidatedAtMs: number;
@@ -5770,8 +5786,8 @@ export function AccountsPage() {
   }, [detailEventsAutoLoadKey, detailTab, loadDetailEvents, selectedRow]);
 
   const refreshQuotaForRow = useCallback(
-    async (row: AccountRow) => {
-      if (row.runtimeOnly) return false;
+    async (row: AccountRow): Promise<AccountQuotaRefreshOutcome> => {
+      if (row.runtimeOnly) return { status: 'ignored' };
       const refreshWithConfig = <TState, TData>(
         config: QuotaConfig<TState, TData>,
         setQuota: QuotaSetter<TState>,
@@ -5798,7 +5814,8 @@ export function AccountsPage() {
             setCodexQuota,
             getScopedQuotaState(CODEX_CONFIG, baseQuotaStores.codexQuota, row.raw)
           );
-          if (!result || result.status !== 'success') return false;
+          const outcome = toAccountQuotaRefreshOutcome(result);
+          if (!result || result.status !== 'success') return outcome;
           const refreshedQuota = result.state;
           const healthyQuota = isKnownHealthyCodexQuota(refreshedQuota);
           invalidateCodexCredentialStatusForSelectionKeys([row.selectionKey], {
@@ -5806,50 +5823,42 @@ export function AccountsPage() {
             supersedeQuotaActionEvidence: healthyQuota,
             supersedeCooldownEvidence: healthyQuota,
           });
-          return true;
+          return outcome;
         }
         case CLAUDE_CONFIG.type:
-          return (
-            (
-              await refreshWithConfig(
-                CLAUDE_CONFIG,
-                setClaudeQuota,
-                getScopedQuotaState(CLAUDE_CONFIG, baseQuotaStores.claudeQuota, row.raw)
-              )
-            )?.status === 'success'
+          return toAccountQuotaRefreshOutcome(
+            await refreshWithConfig(
+              CLAUDE_CONFIG,
+              setClaudeQuota,
+              getScopedQuotaState(CLAUDE_CONFIG, baseQuotaStores.claudeQuota, row.raw)
+            )
           );
         case ANTIGRAVITY_CONFIG.type:
-          return (
-            (
-              await refreshWithConfig(
-                ANTIGRAVITY_CONFIG,
-                setAntigravityQuota,
-                getScopedQuotaState(ANTIGRAVITY_CONFIG, baseQuotaStores.antigravityQuota, row.raw)
-              )
-            )?.status === 'success'
+          return toAccountQuotaRefreshOutcome(
+            await refreshWithConfig(
+              ANTIGRAVITY_CONFIG,
+              setAntigravityQuota,
+              getScopedQuotaState(ANTIGRAVITY_CONFIG, baseQuotaStores.antigravityQuota, row.raw)
+            )
           );
         case KIMI_CONFIG.type:
-          return (
-            (
-              await refreshWithConfig(
-                KIMI_CONFIG,
-                setKimiQuota,
-                getScopedQuotaState(KIMI_CONFIG, baseQuotaStores.kimiQuota, row.raw)
-              )
-            )?.status === 'success'
+          return toAccountQuotaRefreshOutcome(
+            await refreshWithConfig(
+              KIMI_CONFIG,
+              setKimiQuota,
+              getScopedQuotaState(KIMI_CONFIG, baseQuotaStores.kimiQuota, row.raw)
+            )
           );
         case XAI_CONFIG.type:
-          return (
-            (
-              await refreshWithConfig<XaiQuotaState, NonNullable<XaiQuotaState['billing']>>(
-                XAI_CONFIG,
-                setXaiQuota,
-                getScopedQuotaState(XAI_CONFIG, baseQuotaStores.xaiQuota, row.raw)
-              )
-            )?.status === 'success'
+          return toAccountQuotaRefreshOutcome(
+            await refreshWithConfig<XaiQuotaState, NonNullable<XaiQuotaState['billing']>>(
+              XAI_CONFIG,
+              setXaiQuota,
+              getScopedQuotaState(XAI_CONFIG, baseQuotaStores.xaiQuota, row.raw)
+            )
           );
         default:
-          return false;
+          return { status: 'error', error: t('common.unknown_error') };
       }
     },
     [
@@ -5893,17 +5902,53 @@ export function AccountsPage() {
               perProviderConcurrency: MAX_CONCURRENT_QUOTA_REFRESHES_PER_PROVIDER,
               maxConcurrentProviders: MAX_CONCURRENT_QUOTA_REFRESH_PROVIDERS,
             },
-            ({ item }) => (isCurrentBatch() ? refreshQuotaForRow(item) : Promise.resolve(false))
+            ({ item }) =>
+              isCurrentBatch()
+                ? refreshQuotaForRow(item)
+                : Promise.resolve<AccountQuotaRefreshOutcome>({ status: 'ignored' })
           );
           if (!isCurrentBatch()) return;
-          const successCount = results.filter(Boolean).length;
-          showNotification(
-            t('accounts.quota_refresh_result', {
-              success: successCount,
-              total: taskPlan.length,
-            }),
-            successCount === taskPlan.length ? 'success' : 'warning'
-          );
+          const currentResults = results.filter((result) => result.status !== 'ignored');
+          if (currentResults.length === 0) return;
+
+          const successCount = currentResults.filter(
+            (result) => result.status === 'success'
+          ).length;
+          const firstError = currentResults.find((result) => result.status === 'error');
+          const totalCount = currentResults.length;
+          if (taskPlan.length === 1 && totalCount === 1) {
+            const account = taskPlan[0]?.item;
+            if (!account) return;
+            const name = account.accountLabel || account.fileName;
+            if (firstError?.status === 'error') {
+              showNotification(
+                t('accounts.quota_refresh_failed', { name, message: firstError.error }),
+                'error'
+              );
+            } else {
+              showNotification(t('accounts.quota_refresh_success', { name }), 'success');
+            }
+            return;
+          }
+
+          if (firstError?.status === 'error') {
+            showNotification(
+              t('accounts.quota_refresh_result_with_error', {
+                success: successCount,
+                total: totalCount,
+                message: firstError.error,
+              }),
+              successCount === 0 ? 'error' : 'warning'
+            );
+          } else {
+            showNotification(
+              t('accounts.quota_refresh_result', {
+                success: successCount,
+                total: totalCount,
+              }),
+              'success'
+            );
+          }
         } finally {
           if (
             quotaRefreshBatchRef.current?.generation === generation &&
