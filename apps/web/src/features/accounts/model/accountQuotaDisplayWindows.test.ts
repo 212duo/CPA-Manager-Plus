@@ -370,6 +370,7 @@ describe('accountQuotaDisplayWindows', () => {
       claudeQuota: {
         'claude.json': {
           status: 'success',
+          fetchedAtMs: 2_000,
           windows: [
             {
               id: 'seven_day',
@@ -420,6 +421,8 @@ describe('accountQuotaDisplayWindows', () => {
       usedPercent: 30,
       amountLabel: '$1.50 / $5.00',
       source: 'claude',
+      observedAtMs: 2_000,
+      quotaProgressObservedAtMs: 2_000,
     });
     expect(getAccountQuotaSemanticGroup(windows[1])).toBe('other');
   });

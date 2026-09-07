@@ -537,6 +537,7 @@ const buildClaudeQuotaDisplayWindows = (
         resetLabel: '-',
         amountLabel: formatClaudeExtraUsageAmount(quota.extraUsage),
         source: 'claude',
+        observedAtMs: quota.fetchedAtMs ?? null,
         nowMs: options.nowMs,
       })
     );
