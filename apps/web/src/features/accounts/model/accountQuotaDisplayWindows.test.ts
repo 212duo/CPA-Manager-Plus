@@ -918,6 +918,63 @@ describe('accountQuotaDisplayWindows', () => {
     expect(windows.map((window) => window.key)).toEqual(['credits-period']);
   });
 
+  it('keeps unknown weekly xAI usage separate from the monthly billing reset', () => {
+    const weeklyResetMs = Date.parse('2026-09-12T00:00:00Z');
+    const monthlyResetMs = Date.parse('2026-10-01T00:00:00Z');
+    const stores = {
+      ...emptyStores(),
+      xaiQuota: {
+        'xai.json': {
+          status: 'success',
+          billing: {
+            periodType: 'weekly',
+            usagePercent: null,
+            periodStart: '2026-09-05T00:00:00Z',
+            periodEnd: '2026-09-12T00:00:00Z',
+            productUsage: [],
+            monthlyLimitCents: 0,
+            usedCents: 0,
+            includedUsedCents: 0,
+            onDemandCapCents: 0,
+            onDemandUsedCents: 0,
+            onDemandUsedPercent: null,
+            billingPeriodStart: '2026-09-01T00:00:00Z',
+            billingPeriodEnd: '2026-10-01T00:00:00Z',
+            usedPercent: null,
+          },
+        },
+      },
+    } satisfies AccountQuotaStores;
+    const row = buildRow({ name: 'xai.json', type: 'xai' }, stores);
+
+    const windows = buildAccountQuotaDisplayWindows(row, {
+      stores,
+      translateQuotaWindowLabel,
+      t,
+    });
+    const weekly = windows.find((window) => window.key === 'credits-period');
+    const billing = windows.find((window) => window.key === 'billing');
+
+    expect(weekly).toMatchObject({
+      key: 'credits-period',
+      kind: 'weekly',
+      usedPercent: null,
+      remainingPercent: null,
+      resetAtMs: weeklyResetMs,
+      limitWindowSeconds: 7 * 24 * 60 * 60,
+      windowMode: 'fixed',
+      cycleStartMs: Date.parse('2026-09-05T00:00:00Z'),
+      cycleEndMs: weeklyResetMs,
+    });
+    expect(billing).toMatchObject({
+      key: 'billing',
+      usedPercent: null,
+      remainingPercent: null,
+      resetAtMs: monthlyResetMs,
+    });
+    expect(windows.some((window) => window.key === 'pay-as-you-go')).toBe(false);
+  });
+
   it('does not create a monthly window when usage exists without limit evidence', () => {
     const stores = {
       ...emptyStores(),
