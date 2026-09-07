@@ -52,6 +52,7 @@ import { AccountModelsTab } from './components/accountDetail/AccountModelsTab';
 import { AccountOverviewTab } from './components/accountDetail/AccountOverviewTab';
 import { AccountQuotaTab } from './components/accountDetail/AccountQuotaTab';
 import { QuotaWindowCard } from './components/QuotaWindowCard';
+import { IconRefreshCw } from '@/components/ui/icons';
 import { formatQuotaResetTimestamp } from './model/accountsPagePresentation';
 import { buildAccountQuotaDisplayWindow } from './model/accountQuotaDisplayWindows';
 import type { AccountQuotaDisplayWindow } from './model/accountQuotaDisplayWindows';
@@ -10130,6 +10131,20 @@ describe('AccountsPage replacement flows', () => {
         'accounts.refresh_quota'
       ).props.disabled
     ).toBe(true);
+    expect(
+      findAccountCardButtonByAriaLabel(
+        renderer,
+        getAuthFileSelectionKey(first),
+        'accounts.refresh_quota'
+      ).findAllByType(IconRefreshCw)
+    ).toHaveLength(0);
+    expect(
+      findAccountCardButtonByAriaLabel(
+        renderer,
+        getAuthFileSelectionKey(second),
+        'accounts.refresh_quota'
+      ).findAllByType(IconRefreshCw)
+    ).toHaveLength(0);
 
     firstQuota.resolve(makeCodexQuotaData());
     secondQuota.resolve(makeCodexQuotaData());
