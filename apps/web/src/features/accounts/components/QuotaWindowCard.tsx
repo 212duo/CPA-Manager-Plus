@@ -423,6 +423,7 @@ export const QuotaWindowCard = ({
     resolvedMode === 'model' &&
     q.modelScope?.complete !== false &&
     Boolean(usage?.matched || previousUsage?.matched || q.forecast);
+  const modelBoundaryIncomplete = resolvedMode === 'model' && q.windowMode === 'unknown';
   const modelWindowStatsUnavailable = resolvedMode === 'model' && !modelHasUsableUsage;
   const lifecycleUnavailable = q.availability === 'pending_absent' || q.availability === 'inactive';
   const reopened = q.availability === 'active' && (q.activationGeneration ?? 0) > 1;
@@ -548,23 +549,25 @@ export const QuotaWindowCard = ({
     </div>
   );
 
-  const modelWarning = modelWindowStatsUnavailable ? (
-    <div className={styles.modelWarning} data-quota-model-warning="true" role="alert">
-      <span className={styles.warningIcon} aria-hidden="true">
-        <IconTriangleAlert size={13} />
-      </span>
-      <div>
-        <strong>
-          {q.modelScope?.complete === false
-            ? t('accounts.detail_scope_unknown')
-            : t('accounts.detail_model_window_stats_unavailable')}
-        </strong>
-        {q.modelScope?.complete === false ? null : (
-          <p>{t('accounts.detail_model_window_stats_unavailable_desc')}</p>
-        )}
+  const modelWarning =
+    modelWindowStatsUnavailable &&
+    (q.modelScope?.complete === false || !modelBoundaryIncomplete) ? (
+      <div className={styles.modelWarning} data-quota-model-warning="true" role="alert">
+        <span className={styles.warningIcon} aria-hidden="true">
+          <IconTriangleAlert size={13} />
+        </span>
+        <div>
+          <strong>
+            {q.modelScope?.complete === false
+              ? t('accounts.detail_scope_unknown')
+              : t('accounts.detail_model_window_stats_unavailable')}
+          </strong>
+          {q.modelScope?.complete === false ? null : (
+            <p>{t('accounts.detail_model_window_stats_unavailable_desc')}</p>
+          )}
+        </div>
       </div>
-    </div>
-  ) : null;
+    ) : null;
 
   const header = (
     <div className={styles.header}>
@@ -648,7 +651,7 @@ export const QuotaWindowCard = ({
         {header}
         {progress}
         {modelWarning}
-        {modelHasUsableUsage ? (
+        {modelHasUsableUsage && !modelBoundaryIncomplete ? (
           <div className={styles.compareColumns} data-quota-model-comparison="true">
             <UsageColumn
               title={
@@ -696,6 +699,9 @@ export const QuotaWindowCard = ({
           </div>
         ) : null}
         {sourceMeta}
+        {modelBoundaryIncomplete ? (
+          <div className={styles.emptyState}>{t('accounts.detail_window_boundary_incomplete')}</div>
+        ) : null}
       </div>
     );
   }

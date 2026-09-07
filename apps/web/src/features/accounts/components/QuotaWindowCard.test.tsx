@@ -478,6 +478,34 @@ describe('QuotaWindowCard', () => {
     );
   });
 
+  it('shows an incomplete boundary for model quota without model statistics warning or comparisons', () => {
+    const renderer = renderCard(
+      makeWindow({
+        kind: 'weekly',
+        windowMode: 'unknown',
+        modelScope: { kind: 'models', models: ['gpt-5'], complete: true },
+        limitWindowSeconds: null,
+        fromMs: null,
+        toMs: null,
+        cycleStartMs: null,
+        cycleEndMs: null,
+        usage: usage(),
+        currentUsage: usage(),
+        previousUsage: usage({ fromMs: -604_799_000, toMs: 1_000 }),
+        forecast: { requests: 200, tokens: 2_000_000, cost: 200, basis: 'quota' },
+      }),
+      'model'
+    );
+
+    expect(renderer.root.findAllByProps({ 'data-quota-card-mode': 'model' })).toHaveLength(1);
+    expect(readText(renderer.root)).toContain('accounts.detail_window_boundary_incomplete');
+    expect(readText(renderer.root)).not.toContain('accounts.detail_model_window_stats_unavailable');
+    expect(readText(renderer.root)).not.toContain(
+      'accounts.detail_model_window_stats_unavailable_desc'
+    );
+    expect(renderer.root.findAllByProps({ 'data-quota-model-comparison': 'true' })).toHaveLength(0);
+  });
+
   it('keeps model comparisons when only the previous window has actual usage', () => {
     const renderer = renderCard(
       makeWindow({
