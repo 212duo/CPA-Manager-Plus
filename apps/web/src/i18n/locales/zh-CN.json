@@ -1737,6 +1737,7 @@
     "reset_credits_expiry_label": "重置过期时间",
     "reset_credits_invalid_payload": "主动重置次数接口返回格式无效",
     "reset_credit_expiry_item": "第 {{index}} 次",
+    "reset_credit_expiry_remaining_days": "剩余 {{days}} 天",
     "active_limit_label": "生效限额",
     "credits_label": "Credits",
     "credits_balance": "余额",

@@ -1740,6 +1740,7 @@
     "reset_credits_expiry_label": "Срок действия сбросов квоты",
     "reset_credits_invalid_payload": "Endpoint сбросов квоты вернул неверный payload",
     "reset_credit_expiry_item": "Сброс {{index}}",
+    "reset_credit_expiry_remaining_days": "Осталось {{days}} дн.",
     "active_limit_label": "Активный лимит",
     "credits_label": "Credits",
     "credits_balance": "Баланс",

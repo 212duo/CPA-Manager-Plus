@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { JSX } from 'react';
 import { Button } from '@/components/ui/Button';
@@ -13,10 +13,12 @@ import type { AccountDetailViewModel } from '@/features/accounts/model/accountDe
 import {
   formatPercent,
   formatQuotaResetTimestamp,
+  getQuotaResetRemainingDays,
 } from '@/features/accounts/model/accountsPagePresentation';
 import {
   getAccountQuotaSemanticGroup,
 } from '@/features/accounts/model/accountQuotaDisplayWindows';
+import { useInterval } from '@/hooks/useInterval';
 import { formatCompactNumber, formatUsd } from '@/utils/usage';
 import { QuotaWindowCard } from '../QuotaWindowCard';
 import styles from '@/features/accounts/AccountsPage.module.scss';
@@ -140,6 +142,8 @@ export function AccountQuotaTab({
     detailView.quota.resetCreditsAvailableCount !== null ||
     detailView.quota.resetCreditExpiries.length > 0;
   const shouldShowResetRecords = detailView.identity.provider === 'codex' && hasResetRecords;
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useInterval(() => setNowMs(Date.now()), shouldShowResetRecords ? 60_000 : null);
 
   return (
     <div className={styles.quotaTab} data-account-quota-tab="true">
@@ -341,7 +345,10 @@ export function AccountQuotaTab({
                     >
                       <span>{t('codex_quota.reset_credit_expiry_item', { index: index + 1 })}</span>
                       <strong data-quota-reset-credit-expiry={item.id}>
-                        {formatQuotaResetTimestamp(item.expiresAtMs, i18n.language)}
+                        {t('codex_quota.reset_credit_expiry_remaining_days', {
+                          days: getQuotaResetRemainingDays(item.expiresAtMs, nowMs) ?? 0,
+                        })}{' '}
+                        · {formatQuotaResetTimestamp(item.expiresAtMs, i18n.language)}
                       </strong>
                     </div>
                   ))}
