@@ -35,13 +35,18 @@ func ResolveCodexLegacyAccountKey(
 		return "", false, nil
 	}
 
-	evidenceGroups := make([]legacyAccountIdentityEvidence, 0)
-	for _, predicate := range legacyAccountIdentityPredicates(authFile, authIndex) {
-		predicateEvidence, err := queryLegacyAccountIdentityEvidence(ctx, queryer, predicate)
-		if err != nil {
-			return "", false, err
+	evidenceGroups, available, err := queryStoredCodexLegacyIdentityEvidence(ctx, queryer, authFile, authIndex)
+	if err != nil {
+		return "", false, err
+	}
+	if !available {
+		for _, predicate := range legacyAccountIdentityPredicates(authFile, authIndex) {
+			predicateEvidence, err := queryLegacyAccountIdentityEvidence(ctx, queryer, predicate)
+			if err != nil {
+				return "", false, err
+			}
+			evidenceGroups = append(evidenceGroups, predicateEvidence...)
 		}
-		evidenceGroups = append(evidenceGroups, predicateEvidence...)
 	}
 	if !legacyAccountIdentityAllowed(evidenceGroups, targetAccountID, targetMember) {
 		return "", false, nil
@@ -128,7 +133,7 @@ func legacySourceIdentityGuards() string {
 		and (e.auth_label_snapshot is null or lower(trim(e.source)) <> lower(trim(e.auth_label_snapshot)))`
 }
 
-const legacyAccountIdentityEvidenceSelect = `select
+const legacyAccountIdentityEvidenceColumns = `
 	coalesce(e.provider, ''),
 	coalesce(e.auth_provider_snapshot, ''),
 	coalesce(e.auth_account_id_snapshot, ''),
@@ -155,7 +160,9 @@ const legacyAccountIdentityEvidenceSelect = `select
 			or coalesce(e.created_at_ms, 0) > 0 then 0
 		else 1
 	end) as chronology_unknown
-from usage_events e
+`
+
+const legacyAccountIdentityEvidenceSelect = `select ` + legacyAccountIdentityEvidenceColumns + `from usage_events e
 where `
 
 const legacyAccountIdentityEvidenceGroupBy = `
