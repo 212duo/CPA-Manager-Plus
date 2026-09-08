@@ -6309,28 +6309,54 @@ export function AccountsPage() {
             };
 
             const outcome = parseCodexResetCreditOutcome(resetResult);
-            if (outcome === 'no_credit') {
+            // Fail-closed: only explicit 'reset' or 'already_redeemed' triggers the gateway reset
+            if (outcome !== 'reset' && outcome !== 'already_redeemed') {
               endResetTransaction();
-              showNotification(t('codex_quota.reset_no_credits', { name: displayName }), 'error');
-              return;
-            }
-            if (outcome === 'nothing_to_reset') {
-              endResetTransaction();
-              showNotification(
-                t('codex_quota.reset_nothing_to_reset', {
-                  name: displayName,
-                  defaultValue: `${displayName} 当前无需重置额度`,
-                }),
-                'warning'
-              );
-              return;
-            }
-            if (outcome && outcome !== 'reset' && outcome !== 'already_redeemed') {
-              endResetTransaction();
-              showNotification(
-                t('codex_quota.reset_failed', { name: displayName, message: outcome }),
-                'error'
-              );
+              if (outcome === 'no_credit') {
+                commitIfQuotaCacheCurrent(cacheGeneration, () => {
+                  setCodexQuota((prev) => ({
+                    ...prev,
+                    [storeKey]: {
+                      ...(getScopedQuotaState(CODEX_CONFIG, prev, row.raw) ?? verifiedState),
+                      rateLimitResetCreditsAvailableCount: 0,
+                      rateLimitResetCredits: [],
+                    },
+                  }));
+                });
+                setQuotaSnapshotWindowsByRowKey((current) => {
+                  const windows = current.get(row.selectionKey);
+                  if (!windows) return current;
+                  const next = new Map(current);
+                  next.set(
+                    row.selectionKey,
+                    windows.map((window) => ({
+                      ...window,
+                      reset_credits_available: 0,
+                      reset_credits: undefined,
+                    }))
+                  );
+                  return next;
+                });
+                showNotification(t('codex_quota.reset_no_credits', { name: displayName }), 'error');
+              } else if (outcome === 'nothing_to_reset') {
+                showNotification(
+                  t('codex_quota.reset_nothing_to_reset', {
+                    name: displayName,
+                    defaultValue: `${displayName} 当前无需重置额度`,
+                  }),
+                  'warning'
+                );
+              } else {
+                const message =
+                  outcome ||
+                  t('codex_quota.reset_invalid_outcome', {
+                    defaultValue: '返回数据缺少有效重置状态',
+                  });
+                showNotification(
+                  t('codex_quota.reset_failed', { name: displayName, message }),
+                  'error'
+                );
+              }
               return;
             }
 
